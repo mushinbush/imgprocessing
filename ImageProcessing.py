@@ -74,7 +74,7 @@ class ImageProcessingGUI:
         self.rawimg.image = photo
         self.imginfo.configure(
             text="解析度："+str(img.shape[1])+"x"+str(img.shape[0])
-            +"      檔案格式："+imghdr.what(initpath))
+            +"      檔案格式："+str(imghdr.what(initpath)))
 
     def savefile(self):
         files = [('JPEG Files', ('*.jpg','*.jpeg','*.jpe','*.jfif')),
@@ -105,22 +105,14 @@ class ImageProcessingGUI:
             'hw6': self.hw6
         }
         processhomework = functions[self.combobox.get()]()
-
-    def hw1(self):
-        #check if image is choosed
-        if  initpath == 'image':
-            MsgBox = messagebox.showinfo(title='Warning', message='請先選擇圖片！')
-            return
-        #read image
-        img = cv2.imdecode(np.fromfile(initpath,dtype=np.uint8), cv2.IMREAD_COLOR)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        #image process start
-        
+    
+    def showresult(self):
         #resize image
-        f1 = maxwidth / img.shape[1]
-        f2 = maxheight / img.shape[0]
+        f1 = maxwidth / self.pimg.shape[1]
+        f2 = maxheight / self.pimg.shape[0]
         f = min(f1, f2)  # resizing factor
-        dim = (int(img.shape[1] * f), int(img.shape[0] * f))
+        dim = (int(self.pimg.shape[1] * f), int(self.pimg.shape[0] * f))
+        img = self.pimg
         reimg = cv2.resize(img, dim)
         #save as Tk.image
         self.im = Image.fromarray(img)
@@ -131,8 +123,50 @@ class ImageProcessingGUI:
         self.proimg.configure(image=photo)
         self.proimg.image = photo
 
+    def hw1(self):
+        #check if image is choosed
+        if  initpath == 'image':
+            MsgBox = messagebox.showinfo(title='Warning', message='請先選擇圖片！')
+            return
+        #read image
+        img = cv2.imdecode(np.fromfile(initpath,dtype=np.uint8), cv2.IMREAD_COLOR)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        #start image process
+        self.pimg = img
+        #resize & show result
+        self.showresult()
+
     def hw2(self):
-        MsgBox = messagebox.showinfo(title='Information', message='還沒有作業2！')
+        #Set hist parameters
+        hist_height = 540
+        hist_width = 540
+        nbins = 64
+        bin_width = hist_width/nbins
+        #check if image is choosed
+        if  initpath == 'image':
+            MsgBox = messagebox.showinfo(title='Warning', message='請先選擇圖片！')
+            return
+        #start
+        img = cv2.imdecode(np.fromfile(initpath,dtype=np.uint8), cv2.IMREAD_COLOR)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        #Create an empty image for the histogram
+        h = np.zeros((hist_height,hist_width))
+        #Create array for the bins
+        bins = np.arange(nbins,dtype=np.int32).reshape(nbins,1)
+        #Calculate and normalise the histogram
+        hist_item = cv2.calcHist([img],[0],None,[nbins],[0,256])
+        cv2.normalize(hist_item,hist_item,hist_height,cv2.NORM_MINMAX)
+        hist=np.int32(np.around(hist_item))
+        pts = np.column_stack((bins,hist))
+        #Loop through each bin and plot the rectangle in white
+        for x,y in enumerate(hist):
+            cv2.rectangle(h,(int(x*bin_width),int(y)),(int(x*bin_width + bin_width-1),int(hist_height)),255,-1)
+        #Flip upside down
+        h=np.flipud(h)
+        self.pimg = h
+        #resize & show result
+        self.showresult()
 
     def hw3(self):
         MsgBox = messagebox.showinfo(title='Information', message='還沒有作業3！')
