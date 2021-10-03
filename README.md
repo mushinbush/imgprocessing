@@ -1,6 +1,6 @@
 # imgprocessing
 Just some image processing homework.
-There will be 6 homework, 5 processing algorithm, will be finished after the last work.
+There's 6 homework, 5 processing algorithm, will be finished after the last work.
 
 Homework 1: read/write image files
 1.	Please write a program which can read and write image files with different format. Compile it to an execution file named “HW1student_number.exe.”
