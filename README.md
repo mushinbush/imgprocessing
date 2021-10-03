@@ -9,6 +9,6 @@ Homework 1: read/write image files
 4.	The programming language and compiler should be C, C++, Python, or JAVA
 
 Homework 2: Image histogram
-1.     Please write a function which can show the histogram of an image through extended Homework 1. Compile it to an execution file named “HW2student_number.exe.”
-2.     The direction of the histogram can be vertical or horizontal. The following example is vertical.
-3.     The marks (or values) of the x-axis and y-axis can be omitted.
+1.  Please write a function which can show the histogram of an image through extended Homework 1. Compile it to an execution file named “HW2student_number.exe.”
+2.  The direction of the histogram can be vertical or horizontal. The following example is vertical.
+3.  The marks (or values) of the x-axis and y-axis can be omitted.
