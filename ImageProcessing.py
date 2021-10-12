@@ -2,8 +2,9 @@
 
 import base64, os
 import numpy as np
-import cv2, imghdr
+import cv2, imghdr, random
 import tkinter.font as tkf
+import math as m
 from tkinter import Tk, messagebox, ttk, Label, filedialog, simpledialog
 from PIL import Image, ImageTk
 from icon import iconImg
@@ -28,8 +29,7 @@ class ImageProcessingGUI:
         master.iconbitmap('tmp.ico')
         os.remove('tmp.ico')
         fs = tkf.Font(family="Yu Gothic Light", size=16)
-        self.im = ''
-        
+
         #choose button
         self.choose_button = ttk.Button(master, text="檔案", command=self.imgselect)
         self.choose_button.place(x=40,y=40)
@@ -39,10 +39,10 @@ class ImageProcessingGUI:
         self.close_button.place(x=135,y=40)
 
         #choose homework
-        hw = ['HW1','HW2','HW3','HW4','HW5','HW6','裁切']
-        self.combobox = ttk.Combobox(master, values = hw, state="readonly", width = 10)
-        self.combobox.current(0)
-        self.combobox.place(x=865,y=42)
+        hw = ['HW1(原始輸出)','HW2(灰階直方圖)','HW3(高斯白雜訊)','HW4','HW5','HW6','RGB AWGN(Very slow!)','裁切']
+        self.combobox = ttk.Combobox(master, values = hw, state="readonly", width = 20)
+        self.combobox.current(2)
+        self.combobox.place(x=795,y=42)
 
         #process button
         self.process_button = ttk.Button(master, text="處理", command=self.run)
@@ -88,6 +88,8 @@ class ImageProcessingGUI:
         ('*.jpg','*.jpeg','*.jpe','*.jfif','*.png','*.bmp','*.dib','*.ppm')),
         ('All Files', '*.')]
         initpath = filedialog.askopenfilename(filetypes = files)
+        if initpath == "":
+            return
         img = cv2.imdecode(np.fromfile(initpath,dtype=np.uint8), cv2.IMREAD_COLOR)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         self.limg = img
@@ -123,17 +125,20 @@ class ImageProcessingGUI:
     def run(self):
         #run homework choosed from combobox
         functions = {
-            'HW1': self.hw1,
-            'HW2': self.hw2,
-            'HW3': self.hw3,
+            'HW1(原始輸出)': self.hw1,
+            'HW2(灰階直方圖)': self.hw2,
+            'HW3(高斯白雜訊)': self.hw3,
             'HW4': self.hw4,
             'HW5': self.hw5,
             'HW6': self.hw6,
+            'RGB AWGN(Very slow!)': self.rgbawgn,
             '裁切': self.crop
         }
         processhomework = functions[self.combobox.get()]()
     
     def showresult(self):
+        if hasattr(self,'proimg') == False:
+            return
         #resize image
         f1 = maxwidth / self.proimg.shape[1]
         f2 = maxheight / self.proimg.shape[0]
@@ -145,9 +150,9 @@ class ImageProcessingGUI:
         #incase for other format, e.g.HW2, convert to RGB mode before save
         if self.pim.mode !='RGB':
             self.pim = self.pim.convert('RGB')
-        self.reim = Image.fromarray(reimg)
+        reim = Image.fromarray(reimg)
         #Tk.photoImage
-        photo = ImageTk.PhotoImage(self.reim)
+        photo = ImageTk.PhotoImage(reim)
         #Display resized image
         self.resizedproimg.configure(image=photo)
         self.resizedproimg.image = photo
@@ -158,7 +163,7 @@ class ImageProcessingGUI:
         ('PPM Files', '*.ppm'),
         ('BMP Files', ('*.bmp', '*.dib'))]
         #check if image exist
-        if self.limg == '':
+        if hasattr(self,'limg') == False:
             MsgBox = messagebox.showinfo(title='Warning', message='請先進行影像處理！')
             return
         limg = Image.fromarray(self.limg)
@@ -176,7 +181,7 @@ class ImageProcessingGUI:
         ('PPM Files', '*.ppm'),
         ('BMP Files', ('*.bmp', '*.dib'))]
         #check if image is processed
-        if self.pim == '':
+        if hasattr(self,'pim') == False:
             MsgBox = messagebox.showinfo(title='Warning', message='請先進行影像處理！')
             return
         filename = filedialog.asksaveasfile(mode='wb+', filetypes = files, defaultextension = files)
@@ -231,11 +236,40 @@ class ImageProcessingGUI:
             return
         #set AWGN parameters
         awgn = awgnparams(title="AWGN Parameters", parent=self.master)
-        print(awgn.var)
+        if awgn.report == 0:
+            return
         #start image process
-        img = self.rawimg
-        self.proimg = img
+        img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
+        x = (img.shape[0])
+        y = (img.shape[1])
+        dev = awgn.sdev
+        #AWGN Channel(Greyscale)
+        for i in range (1,y):
+            for j in range (1,x-1):
+                phi = random.randint(1, 10)/10
+                r = random.randint(1, 10)/10
+                #gaussian random number
+                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                #Apply gaussian noise to (x,y)
+                if img[j,i] + z1 < 0:
+                    img[j,i] = 0
+                elif img[j,i] + z1 > 255:
+                    img[j,i] = 255
+                else:
+                    img[j,i] = img[j,i] + z1
+                #Apply gaussian noise to (x,y+1)
+                if img[j+1,i] + z2 < 0:
+                    img[j+1,i] = 0
+                elif img[j+1,i] + z2 > 255:
+                    img[j+1,i] = 255
+                else:
+                    img[j+1,i] = img[j+1,i] + z2
         #resize & show result
+        self.proimg = img
+        #self.limg = img
+        self.rinfo.configure(text="Image with Gaussian noise, σ = " + str(dev))
+        self.showpreview()
         self.showresult()
 
     def hw4(self):
@@ -246,6 +280,88 @@ class ImageProcessingGUI:
 
     def hw6(self):
         MsgBox = messagebox.showinfo(title='Information', message='還沒有作業6！')
+
+    def rgbawgn(self):
+        #load raw image & check if image is chosen
+        if self.loadimage() == 'Failed':
+            return
+        #set AWGN parameters
+        awgn = awgnparams(title="AWGN Parameters", parent=self.master)
+        if awgn.report == 0:
+            return
+        #start image process
+        img = self.rawimg
+        B,G,R = cv2.split(img)
+        x = (img.shape[0])
+        y = (img.shape[1])
+        dev = awgn.sdev
+        #AWGN Channel(RGB)
+        for i in range (1,y):
+            for j in range (1,x-1):
+                phi = random.randint(1, 10)/10
+                r = random.randint(1, 10)/10
+                #Blue Channel with gaussian
+                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                #(x,y)
+                if B[j,i] + z1 < 0:
+                    B[j,i] = 0
+                elif B[j,i] + z1 > 255:
+                    B[j,i] = 255
+                else:
+                    B[j,i] = B[j,i] + z1
+                #(x,y+1)
+                if B[j+1,i] + z2 < 0:
+                    B[j+1,i] = 0
+                elif B[j+1,i] + z2 > 255:
+                    B[j+1,i] = 255
+                else:
+                    B[j+1,i] = B[j+1,i] + z2
+                #Green Channel with gaussian
+                phi = random.randint(1, 10)/10
+                r = random.randint(1, 10)/10
+                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                #(x,y)
+                if G[j,i] + z1 < 0:
+                    G[j,i] = 0
+                elif G[j,i] + z1 > 255:
+                    G[j,i] = 255
+                else:
+                    G[j,i] = G[j,i] + z1
+                #(x,y+1)
+                if G[j+1,i] + z2 < 0:
+                    G[j+1,i] = 0
+                elif G[j+1,i] + z2 > 255:
+                    G[j+1,i] = 255
+                else:
+                    G[j+1,i] = G[j+1,i] + z2
+                #Red Channel with gaussian
+                phi = random.randint(1, 10)/10
+                r = random.randint(1, 10)/10
+                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                #(x,y)
+                if R[j,i] + z1 < 0:
+                    R[j,i] = 0
+                elif R[j,i] + z1 > 255:
+                    R[j,i] = 255
+                else:
+                    R[j,i] = R[j,i] + z1
+                #(x,y+1)
+                if R[j+1,i] + z2 < 0:
+                    R[j+1,i] = 0
+                elif R[j+1,i] + z2 > 255:
+                    R[j+1,i] = 255
+                else:
+                    R[j+1,i] = R[j+1,i] + z2
+        img = cv2.merge([B,G,R])
+        #resize & show result
+        self.proimg = img
+        #self.limg = img
+        self.rinfo.configure(text="Image with Gaussian noise, σ = " + str(dev))
+        self.showpreview()
+        self.showresult()
 
     def crop(self):
         #load raw image & check if image is chosen
@@ -328,14 +444,26 @@ class awgnparams(simpledialog.Dialog):
         if vd=="":
             MsgBox = messagebox.showinfo(title='Warning', message='請輸入值！')
             return
-        self.var = int(vd)
+        if str.isdigit(vd) is False:
+            MsgBox = messagebox.showinfo(title='Warning', message='請輸入整數！')
+            return
+        if int(vd) <= 0:
+            MsgBox = messagebox.showinfo(title='Warning', message='數值須大於0！')
+            return
+        self.sdev = round(m.sqrt(int(vd)),2)
         self.destroy()
     def deviation(self):
         vd = self.vd_entry.get()
         if vd=="":
             MsgBox = messagebox.showinfo(title='Warning', message='請輸入值！')
             return
-        self.var = pow(int(vd),2)
+        if str.isdigit(vd) is False:
+            MsgBox = messagebox.showinfo(title='Warning', message='請輸入整數！')
+            return
+        if int(vd) <= 0:
+            MsgBox = messagebox.showinfo(title='Warning', message='數值須大於0！')
+            return
+        self.sdev = int(vd)
         self.destroy()
     def cancel(self):
         self.report = 0
