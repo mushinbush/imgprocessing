@@ -5,6 +5,7 @@ import numpy as np
 import cv2, imghdr, random
 import tkinter.font as tkf
 import math as m
+import matplotlib.pyplot as plt
 from tkinter import Tk, messagebox, ttk, Label, filedialog, simpledialog
 from PIL import Image, ImageTk
 from icon import iconImg
@@ -212,8 +213,6 @@ class ImageProcessingGUI:
         img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
         #create histogram image
         h = np.zeros((hist_height,hist_width))
-        #create array for the bins
-        bins = np.arange(nbins,dtype=np.int32).reshape(nbins,1)
         #calculate and normalise the histogram
         hist_item = cv2.calcHist([img],[0],None,[nbins],[0,256])
         cv2.normalize(hist_item,hist_item,hist_height,cv2.NORM_MINMAX)
@@ -243,15 +242,17 @@ class ImageProcessingGUI:
         x = (img.shape[0])
         y = (img.shape[1])
         dev = awgn.sdev
+        hist = []
         #AWGN Channel(Greyscale)
         for i in range (1,y):
             for j in range (1,x-1):
-                phi = random.randint(1, 10)/10
-                r = random.randint(1, 10)/10
+                phi = random.randint(1, 10000)/10000
+                r = random.randint(1, 10000)/10000
                 #gaussian random number
-                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
-                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
-                #Apply gaussian noise to (x,y)
+                z1 = dev * m.cos(6.28*phi) * m.sqrt(-2*m.log(r))
+                z2 = dev * m.sin(6.28*phi) * m.sqrt(-2*m.log(r))
+                hist.append(z1)
+                hist.append(z2)
                 if img[j,i] + z1 < 0:
                     img[j,i] = 0
                 elif img[j,i] + z1 > 255:
@@ -265,10 +266,19 @@ class ImageProcessingGUI:
                     img[j+1,i] = 255
                 else:
                     img[j+1,i] = img[j+1,i] + z2
+        #normalize histogram
+        normhist = 2 * (hist - np.min(hist)) / (np.max(hist) - np.min(hist)) -1
         #resize & show result
-        self.proimg = img
-        #self.limg = img
-        self.rinfo.configure(text="Image with Gaussian noise, σ = " + str(dev))
+        self.limg = img
+        fig = plt.hist(normhist,bins=int(awgn.bins))
+        plt.xlabel("Normalized Values")
+        plt.ylabel("Frequency")
+        plt.savefig("GaussianDistribution.png")
+        plt.clf()
+        self.proimg = cv2.cvtColor(cv2.imread("GaussianDistribution.png"), cv2.COLOR_BGR2RGB)
+        os.remove("GaussianDistribution.png")
+        self.linfo.configure(text="Image with Gaussian noise, σ = " + str(dev))
+        self.rinfo.configure(text="Gaussian distributions, σ = " + str(dev))
         self.showpreview()
         self.showresult()
 
@@ -438,32 +448,43 @@ class awgnparams(simpledialog.Dialog):
         self.vd_label = Label(slave, text="Input Variance or Standard Deviation\n VAR = σ^2").pack()
         self.vd_entry = ttk.Entry(slave)
         self.vd_entry.pack()
+        b = [10,20,40,80,160]
+        self.bin_label = Label(slave, text="Number of histogram bins", ).pack()
+        self.bin = ttk.Combobox(slave, values = b, state="readonly", width = 4)
+        self.bin.current(3)
+        self.bin.pack()
         return slave
     def variance(self):
         vd = self.vd_entry.get()
+        self.bins = self.bin.get()
         if vd=="":
             MsgBox = messagebox.showinfo(title='Warning', message='請輸入值！')
             return
-        if str.isdigit(vd) is False:
+        try:
+            float(vd)
+        except ValueError:
             MsgBox = messagebox.showinfo(title='Warning', message='請輸入整數！')
             return
-        if int(vd) <= 0:
+        if float(vd) <= 0:
             MsgBox = messagebox.showinfo(title='Warning', message='數值須大於0！')
             return
         self.sdev = round(m.sqrt(int(vd)),2)
         self.destroy()
     def deviation(self):
         vd = self.vd_entry.get()
+        self.bins = self.bin.get()
         if vd=="":
             MsgBox = messagebox.showinfo(title='Warning', message='請輸入值！')
             return
-        if str.isdigit(vd) is False:
+        try:
+            float(vd)
+        except ValueError:
             MsgBox = messagebox.showinfo(title='Warning', message='請輸入整數！')
             return
-        if int(vd) <= 0:
+        if float(vd) <= 0:
             MsgBox = messagebox.showinfo(title='Warning', message='數值須大於0！')
             return
-        self.sdev = int(vd)
+        self.sdev = round(float(vd),2)
         self.destroy()
     def cancel(self):
         self.report = 0
