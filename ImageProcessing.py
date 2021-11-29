@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 
-import base64, os
+import base64, os, time
 import numpy as np
 import cv2, imghdr, random
 import tkinter.font as tkf
 import math as m
-import matplotlib.pyplot as plt
 from tkinter import Tk, messagebox, ttk, Label, filedialog, simpledialog
 from PIL import Image, ImageTk
 from icon import iconImg
@@ -14,7 +13,7 @@ from icon import iconImg
 #global image path
 initpath = ''
 #set resize parameters
-maxwidth, maxheight = 540, 540
+maxwidth, maxheight = 512, 512
 #icon
 tmpIcon = open('tmp.ico','wb+')
 tmpIcon.write(base64.b64decode(iconImg))
@@ -40,9 +39,9 @@ class ImageProcessingGUI:
         self.close_button.place(x=135,y=40)
 
         #choose homework
-        hw = ['HW1(原始輸出)','HW2(灰階直方圖)','HW3(高斯白雜訊)','HW4','HW5','HW6','RGB AWGN(Very slow!)','裁切']
+        hw = ['HW1(原始輸出)','HW2(灰階直方圖)','HW3(高斯白雜訊)','HW4(離散小波轉換)','HW5(直方等化)','HW6','HW7','RGB AWGN(Very slow!)','裁切']
         self.combobox = ttk.Combobox(master, values = hw, state="readonly", width = 20)
-        self.combobox.current(2)
+        self.combobox.current(4)
         self.combobox.place(x=795,y=42)
 
         #process button
@@ -63,19 +62,19 @@ class ImageProcessingGUI:
 
         #display image
         self.resizedrawimg = Label(master, image="", bg="white")
-        self.resizedrawimg.place(x=60,y=110)
+        self.resizedrawimg.place(x=80,y=120)
 
-        #show processed image
+        #display processed image
         self.resizedproimg = Label(master, image="", bg="white")
-        self.resizedproimg.place(x=670,y=110)
+        self.resizedproimg.place(x=678,y=120)
 
         #left image info
         self.linfo = Label(master, font=fs, justify="center", width=45, bg="white")
-        self.linfo.place(x=60,y=80)
+        self.linfo.place(x=60,y=85)
 
         #right image indo
         self.rinfo = Label(master, font=fs, justify="center", width=45, bg="white")
-        self.rinfo.place(x=670,y=80)
+        self.rinfo.place(x=660,y=85)
 
     def closeapp(self):
         MsgBox = messagebox.askquestion(title='Information', message='確定要關閉嗎？')
@@ -129,9 +128,10 @@ class ImageProcessingGUI:
             'HW1(原始輸出)': self.hw1,
             'HW2(灰階直方圖)': self.hw2,
             'HW3(高斯白雜訊)': self.hw3,
-            'HW4': self.hw4,
-            'HW5': self.hw5,
+            'HW4(離散小波轉換)': self.hw4,
+            'HW5(直方等化)': self.hw5,
             'HW6': self.hw6,
+            'HW7': self.hw7,
             'RGB AWGN(Very slow!)': self.rgbawgn,
             '裁切': self.crop
         }
@@ -239,57 +239,230 @@ class ImageProcessingGUI:
             return
         #start image process
         img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
-        x = (img.shape[0])
-        y = (img.shape[1])
+        y = (img.shape[0])
+        x = (img.shape[1])
         dev = awgn.sdev
-        hist = []
+        zall = []
         #AWGN Channel(Greyscale)
-        for i in range (1,y):
-            for j in range (1,x-1):
+        for i in range (0,y):
+            for j in range (0,x-1,2):
                 phi = random.randint(1, 10000)/10000
                 r = random.randint(1, 10000)/10000
                 #gaussian random number
-                z1 = dev * m.cos(6.28*phi) * m.sqrt(-2*m.log(r))
-                z2 = dev * m.sin(6.28*phi) * m.sqrt(-2*m.log(r))
-                hist.append(z1)
-                hist.append(z2)
-                if img[j,i] + z1 < 0:
-                    img[j,i] = 0
-                elif img[j,i] + z1 > 255:
-                    img[j,i] = 255
+                z1 = dev * m.cos(6.283*phi) * m.sqrt(-2*m.log(r))
+                z2 = dev * m.sin(6.283*phi) * m.sqrt(-2*m.log(r))
+                zall.append(z1)
+                zall.append(z2)
+                if img[i,j] + z1 < 0:
+                    img[i,j] = 0
+                elif img[i,j] + z1 > 255:
+                    img[i,j] = 255
                 else:
-                    img[j,i] = img[j,i] + z1
+                    img[i,j] = img[i,j] + z1
                 #Apply gaussian noise to (x,y+1)
-                if img[j+1,i] + z2 < 0:
-                    img[j+1,i] = 0
-                elif img[j+1,i] + z2 > 255:
-                    img[j+1,i] = 255
+                if img[i,j+1] + z2 < 0:
+                    img[i,j+1] = 0
+                elif img[i,j+1] + z2 > 255:
+                    img[i,j+1] = 255
                 else:
-                    img[j+1,i] = img[j+1,i] + z2
-        #normalize histogram
-        normhist = 2 * (hist - np.min(hist)) / (np.max(hist) - np.min(hist)) -1
+                    img[i,j+1] = img[i,j+1] + z2
+        #normalize z
+        normz = 2 * (zall - np.min(zall)) / (np.max(zall) - np.min(zall)) -1
+        #count
+        bins = int(awgn.bins)
+        hist = np.zeros(bins)
+        for i in range(len(normz)):
+            for j in range(bins-1):
+                if normz[i] <= (2*j)/bins-1:
+                    hist[j] += 1
+                    normz[i] = 2
+        hist = np.array([hist]).T
+        #normalize histogram to 0-170
+        hist = (hist - np.min(hist)) / (np.max(hist) - np.min(hist)) * 170
+        #set hist parameters
+        hist_height = 410
+        hist_width = 410
+        bin_width = hist_width/bins
+        #create histogram image
+        h = np.zeros((hist_height,hist_width))
+        h.fill(128)
+        #Loop through each bin and plot the rectangle in white
+        for x,y in enumerate(hist):
+            cv2.rectangle(h,(int(x*bin_width),int(y)),(int(x*bin_width + bin_width-1),int(hist_height)),255,-1)
+        #create full histogram
+        fullhist_height = 540
+        fullhist_width = 540
+        fh = np.zeros((fullhist_height,fullhist_width))
+        fh.fill(255)
+        cv2.line(fh,(60,480),(480,480),0,1)
+        cv2.line(fh,(60,60),(60,480),0,1)
+        for i in range(-10,12,2):
+            a = abs(i/10)
+            b = (i + 10) * 21
+            cv2.putText(fh,str(a),(b+48,505),cv2.FONT_HERSHEY_SIMPLEX,0.5,0,1)
+        for i in range(0,11):
+            a = [1.0,0.9,0.8,0.7,0.6,0.5,0.4,0.3,0.2,0.1,0.0]
+            b = i * 42
+            cv2.putText(fh,str(a[i]),(20,64+b),cv2.FONT_HERSHEY_SIMPLEX,0.5,0,1)
+        for i in range(0,430,21):
+            cv2.rectangle(fh,(60+i,480),(60+i,490),0,1)
+        for i in range(0,430,42):
+            cv2.rectangle(fh,(60,60+i),(50,60+i),0,1)
+        #cover hist to fullhist
+        fh[70:480,61:471] = np.flipud(h) #Flip upside down
         #resize & show result
+        self.proimg = fh # output of the image is float32(F)
         self.limg = img
-        fig = plt.hist(normhist,bins=int(awgn.bins))
-        plt.xlabel("Normalized Values")
-        plt.ylabel("Frequency")
-        plt.savefig("GaussianDistribution.png")
-        plt.clf()
-        self.proimg = cv2.cvtColor(cv2.imread("GaussianDistribution.png"), cv2.COLOR_BGR2RGB)
-        os.remove("GaussianDistribution.png")
-        self.linfo.configure(text="Image with Gaussian noise, σ = " + str(dev))
-        self.rinfo.configure(text="Gaussian distributions, σ = " + str(dev))
+        self.showpreview()
+        self.showresult()
+        self.linfo.configure(text="Image corrupted by AGWN, σ = " + str(dev))
+        self.rinfo.configure(text="Gaussian Distribution (normalized to [-1,1])")
+    def hw4(self):
+        #load raw image & check if image is chosen
+        if self.loadimage() == 'Failed':
+            return
+        #start image process
+        dwtk = dwtkk(title="Get dwt params", parent=self.master)
+        if dwtk.report == 0:
+            return
+        k = dwtk.k
+        img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
+        #resize image
+        width = 512
+        height = 512
+        img = cv2.resize(img, (height,width))
+        #create empty image
+        h = np.zeros((height,width), np.uint8)
+        #dwt ll image cache
+        sv = np.zeros((height,width), np.uint8)
+        for kk in range(0,k):
+            n = 2 ** kk
+            for i in range(0,int(height/n),2):
+                for j in range(0,int(width/n),2):
+                    if n == 1:
+                        ij00 = int(img[i,j])
+                        ij01 = int(img[i,j+1])
+                        ij10 = int(img[i+1,j])
+                        ij11 = int(img[i+1,j+1])
+                    else:
+                        ij00 = int(sv[i,j])
+                        ij01 = int(sv[i,j+1])
+                        ij10 = int(sv[i+1,j])
+                        ij11 = int(sv[i+1,j+1])
+                    if kk == k-1:
+                        h[int(i/2),int(j/2)] = int((ij00 + ij01 + ij10 + ij11)/4)
+                    else:
+                        sv[int(i/2),int(j/2)] = int((ij00 + ij01 + ij10 + ij11)/4)
+                    h[int(i/2),int(j/2+width/2/n)] = int((ij00 - ij01 + ij10 - ij11)/4)
+                    h[int(i/2+height/2/n),int(j/2)] = int((ij00 + ij01 - ij10 - ij11)/4)
+                    h[int(i/2+height/2/n),int(j/2+width/2/n)] = int((ij00 - ij01 - ij10 + ij11)/4)
+
+        print(h)
+        #resize & show result
+        self.rinfo.configure(text="Output of Haar Discrete Wavelet Image, k = " + str(k))
+        self.proimg = h
+        self.showresult()
+
+    def hw5(self):
+        #load raw image & check if image is chosen
+        if self.loadimage() == 'Failed':
+            return
+        #start image process
+        #maximum greysacle
+        Grey = 256
+        stack_height = 540
+        stack_width = 540
+        resize_height = 270
+        resize_width = 540
+        histarray = np.zeros(Grey, dtype = int)
+        img = img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
+        y = (img.shape[0])
+        x = (img.shape[1])
+        for i in range(0,y):
+            for j in range(0,x):
+                histarray[img[i,j]] = histarray[img[i,j]] + 1
+        #set hist parameters (original histogram)
+        hist_height = 270
+        hist_width = 540
+        nbins = 255
+        bin_width = hist_width/nbins
+        #create histogram image
+        oh = np.zeros((hist_height,hist_width))
+        #calculate and normalise the histogram
+        hist_item = np.zeros(Grey, dtype = int)
+        cv2.normalize(histarray,hist_item,hist_height,cv2.NORM_MINMAX)
+        hist=np.int32(np.around(hist_item))
+        #Loop through each bin and plot the rectangle in white
+        for x,y in enumerate(hist):
+            cv2.rectangle(oh,(int(x*bin_width),int(y)),(int(x*bin_width + bin_width-1),int(hist_height)),256,-1)
+        #Flip upside down
+        oh = np.flipud(oh) #output of the image is float32(F)
+        ofull = np.zeros((stack_height,stack_width))
+        ofull.fill(255)
+        #stack original image & histogram
+        #resize originl image into 1/4
+        f1 = resize_width / img.shape[1]
+        f2 = resize_height / img.shape[0]
+        f = min(f1, f2)  # resizing factor
+        dim = (int(img.shape[1] * f), int(img.shape[0] * f))
+        rimg = cv2.resize(img, dim)
+        #stack originl image to ofull
+        ofull[0:0+rimg.shape[0],270-m.floor(rimg.shape[1]/2):270+m.ceil(rimg.shape[1]/2)] = rimg
+        #stack original histogram to ofull
+        ofull[270:540,0:540] = oh
+
+        #start histogram equalization
+        ehistarray = np.zeros(Grey, dtype = int)
+        ehistarray[0] = histarray[0]
+        for i in range(1,Grey-1):
+            ehistarray[i] = ehistarray[i-1] + histarray[i]
+        hmin = sorted(set(histarray))[1]
+        eimg = np.zeros((img.shape[0],img.shape[1]))
+        Tt = np.round(((ehistarray-hmin)/(img.shape[0]*img.shape[1]-hmin))*(Grey-1))
+        y = (img.shape[0])
+        x = (img.shape[1])
+        for i in range(0,y):
+            for j in range(0,x):
+                eimg[i,j] = Tt[img[i,j]]
+        #create histogram image
+        eh = np.zeros((hist_height,hist_width))
+        #calculate and normalise the histogram
+        ephistarray = np.zeros(Grey, dtype = int)
+        for i in range(0,y):
+            for j in range(0,x):
+                ephistarray[int(eimg[i,j])] = ephistarray[int(eimg[i,j])] + 1
+        cv2.normalize(ephistarray,ephistarray,hist_height,cv2.NORM_MINMAX)
+        ehist=np.int32(np.around(ephistarray))
+        #Loop through each bin and plot the rectangle in white
+        for x,y in enumerate(ehist):
+            cv2.rectangle(eh,(int(x*bin_width),int(y)),(int(x*bin_width + bin_width-1),int(hist_height)),255,-1)
+        #Flip upside down
+        efull = np.zeros((stack_height,stack_width))
+        efull.fill(255)
+        #stack original image & histogram
+        #resize originl image into 1/4
+        f1 = resize_width / eimg.shape[1]
+        f2 = resize_height / eimg.shape[0]
+        f = min(f1, f2)  # resizing factor
+        dim = (int(eimg.shape[1] * f), int(eimg.shape[0] * f))
+        eimg = cv2.resize(eimg, dim)
+        #stack originl image to ofull
+        efull[0:0+eimg.shape[0],270-m.floor(eimg.shape[1]/2):270+m.ceil(eimg.shape[1]/2)] = eimg
+        #stack original histogram to ofull
+        efull[270:540,0:540] = np.flipud(eh)
+        #resize & show result
+        self.proimg = efull
+        self.limg = ofull
+        self.rinfo.configure(text="Equalized image & Histogram")
+        self.linfo.configure(text="Input image & Histogram")
         self.showpreview()
         self.showresult()
 
-    def hw4(self):
-        MsgBox = messagebox.showinfo(title='Information', message='還沒有作業4！')
-
-    def hw5(self):
-        MsgBox = messagebox.showinfo(title='Information', message='還沒有作業5！')
-
     def hw6(self):
         MsgBox = messagebox.showinfo(title='Information', message='還沒有作業6！')
+
+    def hw7(self):
+        MsgBox = messagebox.showinfo(title='Information', message='還沒有作業7！')
 
     def rgbawgn(self):
         #load raw image & check if image is chosen
@@ -311,8 +484,8 @@ class ImageProcessingGUI:
                 phi = random.randint(1, 10)/10
                 r = random.randint(1, 10)/10
                 #Blue Channel with gaussian
-                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
-                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                z1 = dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r))
+                z2 = dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r))
                 #(x,y)
                 if B[j,i] + z1 < 0:
                     B[j,i] = 0
@@ -330,8 +503,8 @@ class ImageProcessingGUI:
                 #Green Channel with gaussian
                 phi = random.randint(1, 10)/10
                 r = random.randint(1, 10)/10
-                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
-                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                z1 = dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r))
+                z2 = dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r))
                 #(x,y)
                 if G[j,i] + z1 < 0:
                     G[j,i] = 0
@@ -349,8 +522,8 @@ class ImageProcessingGUI:
                 #Red Channel with gaussian
                 phi = random.randint(1, 10)/10
                 r = random.randint(1, 10)/10
-                z1 = round(dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r)))
-                z2 = round(dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r)))
+                z1 = dev * m.cos(2*3.14*phi) * m.sqrt(-2*m.log(r))
+                z2 = dev * m.sin(2*3.14*phi) * m.sqrt(-2*m.log(r))
                 #(x,y)
                 if R[j,i] + z1 < 0:
                     R[j,i] = 0
@@ -448,10 +621,10 @@ class awgnparams(simpledialog.Dialog):
         self.vd_label = Label(slave, text="Input Variance or Standard Deviation\n VAR = σ^2").pack()
         self.vd_entry = ttk.Entry(slave)
         self.vd_entry.pack()
-        b = [10,20,40,80,160]
+        b = [20,40,80,160]
         self.bin_label = Label(slave, text="Number of histogram bins", ).pack()
         self.bin = ttk.Combobox(slave, values = b, state="readonly", width = 4)
-        self.bin.current(3)
+        self.bin.current(2)
         self.bin.pack()
         return slave
     def variance(self):
@@ -494,6 +667,46 @@ class awgnparams(simpledialog.Dialog):
         self.var_button.pack(side="left")
         self.dev_button = ttk.Button(self, text='σ', command=self.deviation)
         self.dev_button.pack(side="right")
+        cancel_button = ttk.Button(self, text='Cancel', command=self.cancel)
+        cancel_button.pack()
+
+# class tkinter.simpledialog.Dialog (for hw3 AWGN Variance & Deviation)
+# https://docs.python.org/zh-tw/3/library/dialog.html
+class dwtkk(simpledialog.Dialog):
+    def __init__(self, parent, title):
+        self.k = None
+        self.report = None
+        super().__init__(parent, title)
+    def body(self, slave):
+        self.k_frame = ttk.Frame(self)
+        self.k_frame.pack(side="bottom")
+        self.k_label = Label(slave, text="Input level of dwt (k<10)").pack()
+        self.k_entry = ttk.Entry(slave)
+        self.k_entry.pack()
+        return slave
+    def getk(self):
+        k = self.k_entry.get()
+        if k=="":
+            MsgBox = messagebox.showinfo(title='Warning', message='請輸入值！')
+            return
+        try:
+            int(k)
+        except ValueError:
+            MsgBox = messagebox.showinfo(title='Warning', message='請輸入正整數！')
+            return
+        if int(k) <= 0:
+            MsgBox = messagebox.showinfo(title='Warning', message='數值須大於0！')
+        if int(k) >= 10:
+            MsgBox = messagebox.showinfo(title='Warning', message='數值須小於10！')
+            return
+        self.k = int(k)
+        self.destroy()
+    def cancel(self):
+        self.report = 0
+        self.destroy()
+    def buttonbox(self):
+        self.var_button = ttk.Button(self, text='Confirm', command=self.getk)
+        self.var_button.pack(side="left")
         cancel_button = ttk.Button(self, text='Cancel', command=self.cancel)
         cancel_button.pack()
 
