@@ -5,7 +5,7 @@ import numpy as np
 import cv2, imghdr, random
 import tkinter.font as tkf
 import math as m
-from tkinter import Tk, messagebox, ttk, Label, filedialog, simpledialog
+from tkinter import Tk, messagebox, ttk, Label, filedialog, simpledialog, N, E, W, S
 from PIL import Image, ImageTk
 from icon import iconImg
 #import sympy
@@ -39,9 +39,9 @@ class ImageProcessingGUI:
         self.close_button.place(x=135,y=40)
 
         #choose homework
-        hw = ['HW1(原始輸出)','HW2(灰階直方圖)','HW3(高斯白雜訊)','HW4(離散小波轉換)','HW5(直方等化)','HW6','HW7','RGB AWGN(Very slow!)','裁切']
+        hw = ['HW1(原始輸出)','HW2(灰階直方圖)','HW3(高斯白雜訊)','HW4(離散小波轉換)','HW5(直方等化)','HW6(平滑&邊緣偵測)','HW7','RGB AWGN(Very slow!)','裁切']
         self.combobox = ttk.Combobox(master, values = hw, state="readonly", width = 20)
-        self.combobox.current(4)
+        self.combobox.current(5)
         self.combobox.place(x=795,y=42)
 
         #process button
@@ -130,7 +130,7 @@ class ImageProcessingGUI:
             'HW3(高斯白雜訊)': self.hw3,
             'HW4(離散小波轉換)': self.hw4,
             'HW5(直方等化)': self.hw5,
-            'HW6': self.hw6,
+            'HW6(平滑&邊緣偵測)': self.hw6,
             'HW7': self.hw7,
             'RGB AWGN(Very slow!)': self.rgbawgn,
             '裁切': self.crop
@@ -375,7 +375,7 @@ class ImageProcessingGUI:
         resize_height = 270
         resize_width = 540
         histarray = np.zeros(Grey, dtype = int)
-        img = img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
+        img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
         y = (img.shape[0])
         x = (img.shape[1])
         for i in range(0,y):
@@ -459,7 +459,30 @@ class ImageProcessingGUI:
         self.showresult()
 
     def hw6(self):
-        MsgBox = messagebox.showinfo(title='Information', message='還沒有作業6！')
+        #load raw image & check if image is chosen
+        if self.loadimage() == 'Failed':
+            return
+        #get convolution masks
+        conv = convolution_masks(parent=self.master)
+        if conv.report == 0:
+            return
+        #convolution mask
+        cm = conv.c
+        #start image process
+        img = cv2.cvtColor(self.rawimg, cv2.COLOR_RGB2GRAY)
+        m, n = cm.shape
+        if (m == n):
+            y, x = img.shape
+            y = y - m + 1
+            x = x - m + 1
+            proimg = np.zeros((y,x))
+            for i in range(y):
+                for j in range(x):
+                    proimg[i][j] = np.sum(img[i:i+m, j:j+m]*cm)
+        #resize & show result
+        self.proimg = proimg
+        self.rinfo.configure(text="Output convolution image")
+        self.showresult()
 
     def hw7(self):
         MsgBox = messagebox.showinfo(title='Information', message='還沒有作業7！')
@@ -670,7 +693,7 @@ class awgnparams(simpledialog.Dialog):
         cancel_button = ttk.Button(self, text='Cancel', command=self.cancel)
         cancel_button.pack()
 
-# class tkinter.simpledialog.Dialog (for hw3 AWGN Variance & Deviation)
+# class tkinter.simpledialog.Dialog (for hw4 DWT k)
 # https://docs.python.org/zh-tw/3/library/dialog.html
 class dwtkk(simpledialog.Dialog):
     def __init__(self, parent, title):
@@ -705,10 +728,59 @@ class dwtkk(simpledialog.Dialog):
         self.report = 0
         self.destroy()
     def buttonbox(self):
-        self.var_button = ttk.Button(self, text='Confirm', command=self.getk)
-        self.var_button.pack(side="left")
+        self.k_button = ttk.Button(self, text='Confirm', command=self.getk)
+        self.k_button.pack(side="left")
         cancel_button = ttk.Button(self, text='Cancel', command=self.cancel)
         cancel_button.pack()
+
+# class tkinter.simpledialog.Dialog (for hw6 Smoothing/Edge selection)
+# https://docs.python.org/zh-tw/3/library/dialog.html
+class convolution_masks(simpledialog.Dialog):
+    def __init__(self, parent):
+        self.mask = None
+        self.report = None
+        simpledialog.Dialog.__init__(self, parent, "Convolution masks")
+    def body(self, master):
+
+        self.c11_entry = ttk.Entry(master,width=7)
+        self.c11_entry.grid(row=1,column=0)
+        self.c12_entry = ttk.Entry(master,width=7)
+        self.c12_entry.grid(row=1,column=1)
+        self.c13_entry = ttk.Entry(master,width=7)
+        self.c13_entry.grid(row=1,column=2)
+        self.c21_entry = ttk.Entry(master,width=7)
+        self.c21_entry.grid(row=2,column=0)
+        self.c22_entry = ttk.Entry(master,width=7)
+        self.c22_entry.grid(row=2,column=1)
+        self.c23_entry = ttk.Entry(master,width=7)
+        self.c23_entry.grid(row=2,column=2)
+        self.c31_entry = ttk.Entry(master,width=7)
+        self.c31_entry.grid(row=3,column=0)
+        self.c32_entry = ttk.Entry(master,width=7)
+        self.c32_entry.grid(row=3,column=1)
+        self.c33_entry = ttk.Entry(master,width=7)
+        self.c33_entry.grid(row=3,column=2)
+        self.c_button = ttk.Button(master, text='Confirm', command=self.getc, width = 10)
+        self.c_button.grid(row=4,column=0,columnspan=2, sticky=W)
+        cancel_button = ttk.Button(master, text='Cancel', command=self.cancel, width = 10)
+        cancel_button.grid(row=4,column=1,columnspan=2, sticky=E)
+    def getc(self):
+        c1 = np.array([self.c11_entry.get(), self.c12_entry.get(), self.c13_entry.get()])
+        c2 = np.array([self.c21_entry.get(), self.c22_entry.get(), self.c23_entry.get()])
+        c3 = np.array([self.c31_entry.get(), self.c32_entry.get(), self.c33_entry.get()])
+        c = np.array([c1, c2, c3])
+        try:
+            c.astype(float)
+        except ValueError:
+            MsgBox = messagebox.showinfo(title='Warning', message='請輸入數值！')
+            return
+        self.c = c.astype(float)
+        self.destroy()
+    def cancel(self):
+        self.report = 0
+        self.destroy()
+    def buttonbox(self):
+        return
 
 root = Tk()
 my_gui = ImageProcessingGUI(root)
